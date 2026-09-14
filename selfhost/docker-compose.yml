@@ -1,0 +1,62 @@
+# laptop selfhost, manual runs only — nothing starts on boot
+# usage: docker compose -f selfhost/docker-compose.yml --env-file selfhost/.env up -d
+# newsletter/mailer. app + postgres. ~150mb ram.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: listmonk-db
+    restart: "no"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - POSTGRES_USER=listmonk
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-changeme}
+      - POSTGRES_DB=listmonk
+    volumes:
+      - listmonk-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U listmonk"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    image: listmonk/listmonk:latest
+    container_name: listmonk
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - LISTMONK_app__address=0.0.0.0:9000
+      - LISTMONK_db__host=db
+      - LISTMONK_db__port=5432
+      - LISTMONK_db__user=listmonk
+      - LISTMONK_db__password=${DB_PASSWORD:-changeme}
+      - LISTMONK_db__database=listmonk
+      - LISTMONK_db__ssl_mode=disable
+      - LISTMONK_ADMIN_USER=${ADMIN_USER:-admin}
+      - LISTMONK_ADMIN_PASSWORD=${ADMIN_PASSWORD:-changeme-long}
+      - TZ=Europe/Moscow
+    command: [sh, -c, "./listmonk --install --idempotent --yes --config '' && ./listmonk --upgrade --yes --config '' && ./listmonk --config ''"]
+    volumes:
+      - listmonk-uploads:/listmonk/uploads
+    ports:
+      - "${LISTMONK_PORT:-8095}:9000"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  listmonk-db:
+    name: listmonk-db
+  listmonk-uploads:
+    name: listmonk-uploads

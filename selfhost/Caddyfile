@@ -1,0 +1,4 @@
+# vps only, skip on laptop
+news.example.com {
+	reverse_proxy 127.0.0.1:8095
+}
